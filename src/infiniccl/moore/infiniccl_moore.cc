@@ -236,9 +236,9 @@ CustomAllReduceComm::CustomAllReduceComm(int64_t rank, int ndev, void* comm) {
     size_t total_bytes = num_elements * element_size;
     void* rank_data = nullptr;
     CHECK_MUSA_SUCCESS(musaMalloc(&rank_data, total_bytes));
-    buffer_ptrs = create_shared_buffer(max_size, devices, crank, acomm, false);
+    buffer_ptrs = create_shared_buffer(max_size, devices, crank, acomm);
 
-    custom_ptr = init_custom_ar(meta_ptrs, rank_data, num_elements, crank);
+    custom_ptr = init_custom_ar(meta_ptrs, rank_data, num_elements, crank, true);
     register_buffer(custom_ptr, buffer_ptrs);
 }
 
