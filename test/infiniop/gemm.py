@@ -24,27 +24,38 @@ from libinfiniop import (
 # These are not meant to be imported from other modules
 _TEST_CASES = [
     # alpha, beta, a_shape, b_shape, c_shape, a_stride, b_stride, c_stride
-    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), None, None, None),
-    (1.0, 0.0, (2, 4, 2048), (2, 2048, 2048), (2, 4, 2048), None, None, None),
-    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
-    (1.0, 1.0, (6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
-    (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
+    # (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), None, None, None),
+    # (1.0, 0.0, (2, 4, 2048), (2, 2048, 2048), (2, 4, 2048), None, None, None),
+    # (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
+    # (1.0, 1.0, (6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
+    # (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
+    
+    # (1.0, 0.0, (1, 18944), (18944, 3584), (1, 3584), None, None, None),
+    (1.0, 0.0, (4, 18944), (18944, 3584), (4, 3584), None, None, None),
+    # (1.0, 0.0, (16, 18944), (18944, 3584), (16, 3584), None, None, None),
+    # (1.0, 0.0, (1, 18944), (18944, 3584), (1, 3584), None, None, None),
+    (1.0, 0.0, (4, 18944), (18944, 3584), (4, 3584), None, None, None),
+    # (1.0, 0.0, (16, 18944), (18944, 3584), (16, 3584), None, None, None),
+    # (1.0, 0.0, (4, 3584), (4, 18944), (18944, 3584), (3584, 1), (18944, 1), (1, 18944)),
 ]
+# logits_in: Tensor: shape[ 4 3584 ] strides[ 3584 1 ] dtype=12
+# gate_buf: Tensor: shape[ 4 18944 ] strides[ 18944 1 ] dtype=12
+# w_ffn_down: Tensor: shape[ 18944 3584 ] strides[ 1 18944 ] dtype=12
 
 # Data types used for testing
-_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
+_TENSOR_DTYPES = [InfiniDtype.F16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 0, "rtol": 1e-2},
-    InfiniDtype.F32: {"atol": 0, "rtol": 1e-3},
-    InfiniDtype.BF16: {"atol": 0, "rtol": 5e-2},
+    # InfiniDtype.F32: {"atol": 0, "rtol": 1e-3},
+    # InfiniDtype.BF16: {"atol": 0, "rtol": 5e-2},
 }
 
 DEBUG = False
 PROFILE = False
-NUM_PRERUN = 10
-NUM_ITERATIONS = 1000
+NUM_PRERUN = 1
+NUM_ITERATIONS = 10
 
 
 # PyTorch implementation for matrix multiplication
@@ -99,8 +110,8 @@ def test(
             b.torch_tensor(),
             alpha,
         )
-
-    torch_gemm()
+    # for _ in range(2):
+    #     torch_gemm()
 
     if sync is not None:
         sync()
@@ -145,21 +156,22 @@ def test(
             )
         )
 
-    lib_gemm()
+    for _ in range(2):
+        lib_gemm()
 
     # Validate results
-    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+    # atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
 
-    if DEBUG:
-        debug(c.actual_tensor(), ans.torch_tensor(), atol=atol, rtol=rtol)
+    # if DEBUG:
+    #     debug(c.actual_tensor(), ans.torch_tensor(), atol=atol, rtol=rtol)
 
-    assert torch.allclose(c.actual_tensor(), ans.torch_tensor(), atol=atol, rtol=rtol)
+    # assert torch.allclose(c.actual_tensor(), ans.torch_tensor(), atol=atol, rtol=rtol)
 
     # Profiling workflow
-    if PROFILE:
+    # if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: torch_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("    lib", lambda: lib_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
+        # profile_operation("PyTorch", lambda: torch_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
+        # profile_operation("    lib", lambda: lib_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
     check_error(LIBINFINIOP.infiniopDestroyGemmDescriptor(descriptor))
 

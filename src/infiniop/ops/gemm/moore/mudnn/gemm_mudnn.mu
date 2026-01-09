@@ -8,6 +8,16 @@ namespace op::gemm::mudnn {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::moore::Handle::Internal> internal;
+    std::map<size_t, void*> mudnn_ptr_pool;
+
+    ~Opaque() {
+        for (auto& pair : mudnn_ptr_pool) {
+            if (pair.second != nullptr) {
+                musaFree(pair.second);
+            }
+        }
+        mudnn_ptr_pool.clear();
+    }
 };
 
 Descriptor::~Descriptor() {
@@ -35,9 +45,32 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
+void* opaqueMalloc(size_t size, std::map<size_t, void*> &pool) {
+    auto it = pool.find(size);
+    if (it != pool.end()) {
+        return it->second;
+    }
+    
+    void* ptr = nullptr;
+    musaError_t status = musaMalloc(&ptr, size);
+    
+    if (status != musaSuccess || ptr == nullptr) {
+        return nullptr;
+    }
+    
+    pool[size] = ptr;
+    return ptr;
+}
+
+void opaqueFree(void* ptr) {
+    //待完善
+    return;
+}
+
 template <typename Tdata>
 infiniStatus_t calculate(
     const MatmulInfo &info,
+    std::map<size_t, void*> &pool,
     std::shared_ptr<device::moore::Handle::Internal> &_internal,
     void *c,
     float beta,
@@ -126,10 +159,12 @@ infiniStatus_t calculate(
         out.SetNdInfo(static_cast<int>(c_dims_array.size()), c_dims_array.data(), c_stride_array.data());
 
         // 8. Workspace Memory Handler
-        ::musa::dnn::MemoryMaintainer maintainer = [](size_t size) -> ::musa::dnn::MemoryHandler {
-            void* ptr = nullptr;
-            musaMalloc(&ptr, size);
-            return ::musa::dnn::MemoryHandler(ptr, [](void* p) { if(p) musaFree(p); });
+        ::musa::dnn::MemoryMaintainer maintainer = [&pool](size_t size) -> ::musa::dnn::MemoryHandler {
+            //void* ptr = nullptr;
+            //musaMalloc(&ptr, size);
+            //return ::musa::dnn::MemoryHandler(ptr, [](void* p) { if(p) musaFree(p); });
+            auto ptr = mudnn::opaqueMalloc(size, pool);
+            return ::musa::dnn::MemoryHandler(ptr, [](void* p) { if(p) mudnn::opaqueFree(p); });
         };
 
         // 9. Tensor left and Tensor right transpose config
@@ -185,11 +220,11 @@ infiniStatus_t Descriptor::calculate(void *workspace,
                                      void *stream) const {
     switch (_dtype) {
         case INFINI_DTYPE_F16:
-            return mudnn::calculate<half>(_info, _opaque->internal, c, beta, a, b, alpha, stream);
+            return mudnn::calculate<half>(_info, _opaque->mudnn_ptr_pool, _opaque->internal, c, beta, a, b, alpha, stream);
         case INFINI_DTYPE_F32:
-            return mudnn::calculate<float>(_info,_opaque->internal, c, beta, a, b, alpha, stream);
+            return mudnn::calculate<float>(_info, _opaque->mudnn_ptr_pool, _opaque->internal, c, beta, a, b, alpha, stream);
         case INFINI_DTYPE_BF16:
-            return mudnn::calculate<__mt_bfloat16>(_info,_opaque->internal, c, beta, a, b, alpha, stream);
+            return mudnn::calculate<__mt_bfloat16>(_info, _opaque->mudnn_ptr_pool, _opaque->internal, c, beta, a, b, alpha, stream);
         default:
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
